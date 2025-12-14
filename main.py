@@ -1,4 +1,11 @@
 import random
+import json
+
+
+def json_read():
+    with open("upgrade.json", "r") as f:
+        upgrade_dict = json.load(f)
+    return upgrade_dict
 
 class Character:
     def __init__(self):
@@ -32,6 +39,7 @@ class Game:
     def __init__(self):
         self.player = Character()
         self.enemy = Character()
+        self.upgrade_file = json_read()
 
     @staticmethod
     def random_action(player):
@@ -64,6 +72,25 @@ class Game:
         print(f"Player HP: {self.player.hp}, Armor: {self.player.armor}")
         print(f"Enemy HP: {self.enemy.hp}, Armor: {self.enemy.armor}")
 
+    @staticmethod
+    def random_rarities_choices():
+        loot_list = []
+        rarities = ['common', 'uncommon', 'rare', 'epic', 'legendary']
+        weights = [40,30,15,10,5]
+        for loot in range(0,3):
+            loot = random.choices(rarities, weights=weights, k=1)[0]
+            loot_list.append(loot)
+        return loot_list
+
+    def upgrade(self):
+        loot_list = []
+        random_rarities = self.random_rarities_choices()
+        for loot in random_rarities:
+            loot_choice = random.choice(list(self.upgrade_file[loot]))
+            loot_list.append(loot_choice)
+        return loot_list
+
+
 
 class GameLogic:
     def __init__(self):
@@ -73,12 +100,14 @@ class GameLogic:
             ("scissors", "paper"): 1,
         }
 
+
     def rps_result(self, a, b):
         if a == b:
             return 0
         return 1 if (a, b) in self.WIN_MAP else -1
 
-    def apply_damage(self, who, to_whom, atk_type, def_type):
+    @staticmethod
+    def apply_damage(who, to_whom, atk_type, def_type):
         damage = who.attack[atk_type]
         block = to_whom.defense[def_type]
         effective_damage = max(0, damage - block)
@@ -91,11 +120,17 @@ class GameLogic:
                 to_whom.armor = 0
         to_whom.hp -= effective_damage
 
-    def armor_regen(self, action, who):
+    @staticmethod
+    def armor_regen(action, who):
         amount_regen = who.defense[action]
         who.armor += amount_regen
         if who.max_armor <= who.armor:
             who.armor = who.max_armor
+
+    #TODO Сделать логику апгрейда, добавить % появления крутых апгрейдов, добавить сам выбор апгрейдов с джсон файла
+
+
+
 
     def handle_result(self, result, player, enemy, player_action, enemy_action):
         if result == 1:
@@ -115,3 +150,5 @@ if __name__ == '__main__':
         game = Game()
         while game.player.is_alive() and game.enemy.is_alive():
             game.game_step()
+            if not game.enemy.is_alive():
+                game.upgrade()

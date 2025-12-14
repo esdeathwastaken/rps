@@ -1,0 +1,36 @@
+{
+  "common": [
+    {"attack": 1},
+    {"defense": 1},
+    {"hp_heal": 6},
+    {"hp_max": 2}
+  ],
+  "uncommon": [
+    {"attack": 2},
+    {"defense": 2},
+    {"armor": 1},
+    {"hp_heal": 8},
+    {"hp_max": 4}
+  ],
+  "rare": [
+    {"attack": 3},
+    {"defense": 3},
+    {"armor": 2},
+    {"hp_heal": 12},
+    {"hp_max": 6}
+  ],
+  "epic": [
+    {"attack": 4},
+    {"defense": 4},
+    {"armor": 4},
+    {"hp_heal": 16},
+    {"hp_max": 7}
+  ],
+  "legendary": [
+    {"attack": 6},
+    {"defense": 6},
+    {"armor": 5},
+    {"hp_heal": 32},
+    {"hp_max": 12}
+  ]
+}
