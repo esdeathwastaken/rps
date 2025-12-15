@@ -7,6 +7,7 @@ def json_read():
         upgrade_dict = json.load(f)
     return upgrade_dict
 
+
 class Character:
     def __init__(self):
         self.max_hp = random.randint(16, 25)
@@ -34,6 +35,7 @@ class Character:
 
     def is_alive(self):
         return self.hp > 0
+
 
 class Game:
     def __init__(self):
@@ -73,15 +75,13 @@ class Game:
         print(f"Player HP: {self.player.hp}, Armor: {self.player.armor}")
         print(f"Enemy HP: {self.enemy.hp}, Armor: {self.enemy.armor}")
 
-
     def random_rarities_choices(self):
         loot_list = []
-        weights = [40,30,15,10,5]
-        for loot in range(0,3):
+        weights = [40, 30, 15, 10, 5]
+        for loot in range(0, 3):
             loot = random.choices(self.rarities, weights=weights, k=1)[0]
             loot_list.append(loot)
         return loot_list
-
 
     def exclude_repeats(self, random_rarities):
         loot_list = []
@@ -125,8 +125,6 @@ class Game:
             print(f'здоровье восстановлено на {value}')
         print('фаза прокачки завершена')
 
-
-
     def upgrade(self):
         random_rarities = self.random_rarities_choices()
         loot_list = self.exclude_repeats(random_rarities)
@@ -134,7 +132,6 @@ class Game:
         key, value = self.get_key_from_dict(random_loot)
         weapon = self.choose_random_weapon(key)
         self.increase_stats(key, value, weapon)
-
 
 
 class GameLogic:
@@ -149,7 +146,6 @@ class GameLogic:
         if a == b:
             return 0
         return 1 if (a, b) in self.WIN_MAP else -1
-
 
     @staticmethod
     def apply_damage(who, to_whom, atk_type, def_type):
@@ -172,10 +168,6 @@ class GameLogic:
         if who.max_armor <= who.armor:
             who.armor = who.max_armor
 
-    #TODO Сделать логику апгрейда, добавить % появления крутых апгрейдов, добавить сам выбор апгрейдов с джсон файла
-
-
-
     def handle_result(self, result, player, enemy, player_action, enemy_action):
         if result == 1:
             self.apply_damage(player, enemy, player_action, enemy_action)
@@ -188,6 +180,7 @@ class GameLogic:
             self.apply_damage(enemy, player, enemy_action, player_action)
             self.armor_regen(player_action, player)
             self.armor_regen(enemy_action, enemy)
+
 
 if __name__ == '__main__':
     for _ in range(1, 10):
