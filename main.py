@@ -40,6 +40,7 @@ class Game:
         self.player = Character()
         self.enemy = Character()
         self.upgrade_file = json_read()
+        self.rarities = ['common', 'uncommon', 'rare', 'epic', 'legendary']
 
     @staticmethod
     def random_action(player):
@@ -72,24 +73,58 @@ class Game:
         print(f"Player HP: {self.player.hp}, Armor: {self.player.armor}")
         print(f"Enemy HP: {self.enemy.hp}, Armor: {self.enemy.armor}")
 
-    @staticmethod
-    def random_rarities_choices():
+
+    def random_rarities_choices(self):
         loot_list = []
-        rarities = ['common', 'uncommon', 'rare', 'epic', 'legendary']
         weights = [40,30,15,10,5]
         for loot in range(0,3):
-            loot = random.choices(rarities, weights=weights, k=1)[0]
+            loot = random.choices(self.rarities, weights=weights, k=1)[0]
             loot_list.append(loot)
         return loot_list
 
-    def upgrade(self):
+
+    def exclude_repeats(self, random_rarities):
         loot_list = []
-        random_rarities = self.random_rarities_choices()
+        used_keys = set()
         for loot in random_rarities:
-            loot_choice = random.choice(list(self.upgrade_file[loot]))
+            while True:
+                loot_choice = random.choice(list(self.upgrade_file[loot]))
+                key = next(iter(loot_choice))
+                if key not in used_keys:
+                    break
+            used_keys.add(key)
             loot_list.append(loot_choice)
         return loot_list
 
+    @staticmethod
+    def get_key_from_dict(dict_):
+        for i, _ in dict_.items():
+            return i, _
+
+    @staticmethod
+    def choose_random_weapon(key):
+        if key == 'attack' or key == 'defense':
+            weapon = random.choice(['rock', 'scissors', 'paper'])
+            return weapon
+
+    def handle_data_upgrade(self, key, value, weapon):
+        if weapon is not None:
+            stat = getattr(self.player, key)
+            stat[weapon] += value
+        elif key == 'hp_heal':
+            max_hp = self.player.max_hp
+            #TODO доделать
+
+
+
+    def upgrade(self):
+        random_rarities = self.random_rarities_choices()
+        loot_list = self.exclude_repeats(random_rarities)
+        random_loot = random.choice(loot_list)
+        key, value = self.get_key_from_dict(random_loot)
+        weapon = self.choose_random_weapon(key)
+        self.handle_data_upgrade(key, value, weapon)
+        return 0
 
 
 class GameLogic:
