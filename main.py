@@ -107,13 +107,23 @@ class Game:
             weapon = random.choice(['rock', 'scissors', 'paper'])
             return weapon
 
-    def handle_data_upgrade(self, key, value, weapon):
+    def increase_stats(self, key, value, weapon):
         if weapon is not None:
             stat = getattr(self.player, key)
             stat[weapon] += value
+            print(f'{weapon} {key} увеличено на {value}')
+        elif key == 'hp_max':
+            self.player.max_hp += value
+            print(f'максимальное хп увеличено на {value}')
+        elif key == 'armor':
+            self.player.max_armor += value
+            print(f'армор увеличен на {value}')
         elif key == 'hp_heal':
-            max_hp = self.player.max_hp
-            #TODO доделать
+            self.player.hp += value
+            if self.player.max_hp < self.player.hp:
+                self.player.hp = self.player.max_hp
+            print(f'здоровье восстановлено на {value}')
+        print('фаза прокачки завершена')
 
 
 
@@ -123,8 +133,8 @@ class Game:
         random_loot = random.choice(loot_list)
         key, value = self.get_key_from_dict(random_loot)
         weapon = self.choose_random_weapon(key)
-        self.handle_data_upgrade(key, value, weapon)
-        return 0
+        self.increase_stats(key, value, weapon)
+
 
 
 class GameLogic:
@@ -135,11 +145,11 @@ class GameLogic:
             ("scissors", "paper"): 1,
         }
 
-
     def rps_result(self, a, b):
         if a == b:
             return 0
         return 1 if (a, b) in self.WIN_MAP else -1
+
 
     @staticmethod
     def apply_damage(who, to_whom, atk_type, def_type):
@@ -163,7 +173,6 @@ class GameLogic:
             who.armor = who.max_armor
 
     #TODO Сделать логику апгрейда, добавить % появления крутых апгрейдов, добавить сам выбор апгрейдов с джсон файла
-
 
 
 
