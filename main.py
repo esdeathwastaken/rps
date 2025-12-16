@@ -69,7 +69,7 @@ class Game:
         enemy_action = self.random_action(self.enemy)
         logic = GameLogic()
         result = logic.rps_result(player_action, enemy_action)
-        print(f"Player chooses {player_action}, Enemy chooses {enemy_action}, Result: {result}")
+        print(f"Player chooses {player_action} {self.player.attack[player_action]}/{self.player.defense[player_action]}, Enemy chooses {enemy_action} {self.player.attack[enemy_action]}/{self.player.defense[enemy_action]}, Result: {result}")
         logic.handle_result(result, self.player, self.enemy, player_action, enemy_action)
         self.refill_charges(player_action, enemy_action)
         print(f"Player HP: {self.player.hp}, Armor: {self.player.armor}")
@@ -152,14 +152,13 @@ class GameLogic:
         damage = who.attack[atk_type]
         block = to_whom.defense[def_type]
         effective_damage = max(0, damage - block)
-        if to_whom.armor > 0:
-            if to_whom.armor >= effective_damage:
-                to_whom.armor -= effective_damage
-                effective_damage = 0
-            else:
-                effective_damage -= to_whom.armor
-                to_whom.armor = 0
+        absorbed = min(to_whom.armor, effective_damage)
+        to_whom.armor -= absorbed
+        effective_damage -= absorbed
         to_whom.hp -= effective_damage
+        to_whom.hp = max(to_whom.hp, 0)
+        to_whom.armor = max(to_whom.armor, 0)
+
 
     @staticmethod
     def armor_regen(action, who):
@@ -183,9 +182,12 @@ class GameLogic:
 
 
 if __name__ == '__main__':
-    for _ in range(1, 10):
         game = Game()
         while game.player.is_alive() and game.enemy.is_alive():
             game.game_step()
+            if not game.player.is_alive():
+                print('player is dead')
             if not game.enemy.is_alive():
+                print('enemy is dead')
                 game.upgrade()
+
