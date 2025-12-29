@@ -1,18 +1,17 @@
 import torch
 import torch.nn as nn
-import torch.optim as optim
 import numpy as np
 
-IDX_TO_ACTION = {
-    0: "rock",
-    1: "paper",
-    2: "scissors"}
+IDX_TO_ACTION = {0: "rock", 1: "paper", 2: "scissors"}
+
 
 class PolicyNet(nn.Module):
     def __init__(self):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(27, 64),
+            nn.Linear(26, 128),
+            nn.ReLU(),
+            nn.Linear(128, 64),
             nn.ReLU(),
             nn.Linear(64, 3),
             nn.Softmax(dim=-1)
@@ -21,13 +20,21 @@ class PolicyNet(nn.Module):
     def forward(self, x):
         return self.net(x)
 
+    def save(self, path="battle_model.pth"):
+        torch.save(self.state_dict(), path)
+        print(f"Модель сохранена в {path}")
+
+    def load(self, path="battle_model.pth"):
+        try:
+            self.load_state_dict(torch.load(path))
+            print(f"Модель загружена из {path}")
+        except FileNotFoundError:
+            print("Файл модели не найден, начинаем с нуля.")
+
 
 def get_state(game):
     p, e = game.player, game.enemy
-    state = [
-        p.hp, p.max_hp, p.armor, p.max_armor,
-        e.hp, e.max_hp, e.armor, e.max_armor,
-    ]
+    state = [p.hp, p.max_hp, p.armor, p.max_armor, e.hp, e.max_hp, e.armor, e.max_armor]
     for a in ["rock", "paper", "scissors"]:
         state += [p.attack[a], p.defense[a], p.charges[a]]
     for a in ["rock", "paper", "scissors"]:
@@ -36,32 +43,29 @@ def get_state(game):
 
 
 def select_action_masked(model, state, player):
-    state = torch.tensor(state)
+    state = torch.tensor(state, dtype=torch.float32)
     probs = model(state)
-
-    mask = torch.tensor([
-        player.charges["rock"] > 0,
-        player.charges["paper"] > 0,
-        player.charges["scissors"] > 0
-    ], dtype=torch.float32)
-
-    probs = probs * mask
-    if probs.sum() == 0:
-        probs = torch.ones(3) / 3
+    mask = torch.tensor([player.charges[a] > 0 for a in ["rock", "paper", "scissors"]], dtype=torch.float32)
+    masked_probs = probs * mask
+    if masked_probs.sum() <= 0:
+        masked_probs = mask / (mask.sum() + 1e-8)
     else:
-        probs = probs / probs.sum()
+        masked_probs = masked_probs / masked_probs.sum()
 
-    dist = torch.distributions.Categorical(probs)
+    dist = torch.distributions.Categorical(masked_probs)
     action = dist.sample()
     return action.item(), dist.log_prob(action)
 
 
-def calc_reward(old_p_hp, old_e_hp, game):
-    reward = 0
-    reward += (old_p_hp - game.player.hp) * -0.2
-    reward += (old_e_hp - game.enemy.hp) * 0.5
-    if not game.enemy.is_alive():
-        reward += 30
-    if not game.player.is_alive():
-        reward -= 50
+def calc_reward(old_p_hp, old_p_arm, old_e_hp, old_e_arm, old_charges, game):
+    reward = 0.0
+    reward += (old_e_hp - game.enemy.hp) * 1.5
+    reward += (old_e_arm - game.enemy.armor) * 0.5
+    reward -= (old_p_hp - game.player.hp) * 2.0
+    reward -= (old_p_arm - game.player.armor) * 0.5
+    for i in ['rock', 'paper', 'scissors']:
+        if game.player.charges[i] <= 0:
+            reward -= 10
+    if not game.enemy.is_alive(): reward += 20
+    if not game.player.is_alive(): reward -= 30
     return reward

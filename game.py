@@ -1,107 +1,79 @@
 import random
-import json
 import torch
-import torch.nn as nn
+from utils import json_read
 import torch.optim as optim
-import numpy as np
-from agent import PolicyNet
-from agent import calc_reward
-from agent import select_action_masked
-from agent import get_state
-from agent import IDX_TO_ACTION
-
-def json_read():
-    with open("upgrade.json", "r") as f:
-        return json.load(f)
+import matplotlib.pyplot as plt
+from agent import PolicyNet, calc_reward, select_action_masked, get_state, IDX_TO_ACTION
 
 
 class Character:
-    def __init__(self):
-        self.max_hp = random.randint(16, 25)
-        self.max_armor = random.randint(0, 10)
-        self.hp = self.max_hp
-        self.armor = self.max_armor
+    def __init__(self, name="Character"):
+        self.name = name
+        self.max_hp = random.randint(19, 25)
+        self.max_armor = random.randint(4, 10)
+        self.hp, self.armor = self.max_hp, self.max_armor
         self.attack = {
-            "rock": random.randint(3, 12),
-            "paper": random.randint(3, 12),
-            "scissors": random.randint(3, 12),
+            "rock": random.randint(10,14),
+            "paper": random.randint(3,6),
+            "scissors": random.randint(8,11)
         }
-
         self.defense = {
-            "rock": random.randint(0, 8),
-            "paper": random.randint(0, 8),
-            "scissors": random.randint(0, 8),
+            "rock": random.randint(6,10),
+            "paper": random.randint(2,5),
+            "scissors": random.randint(7,11)
         }
-
-        self.charges = {
-            "rock": 3,
-            "paper": 3,
-            "scissors": 3,
-        }
-
-    def __str__(self):
-        return self.__class__.__name__
+        self.charges = {k: 3 for k in ["rock", "paper", "scissors"]}
 
     def is_alive(self):
         return self.hp > 0
 
+
 class Enemy(Character):
-    def __init__(self):
-        super().__init__()
-        self.max_hp = 5
-        self.max_armor = 3
-        self.hp = self.max_hp
-        self.armor = self.max_armor
-        self.attack = {
-            "rock": 2,
-            "paper": 2,
-            "scissors": 2,
-        }
+    def __init__(self, x):
+        super().__init__(name=f"Enemy#{x}")
+        self.enemy_data = json_read('enemies.json')
+        self.generate_enemy_stats(x)
 
-        self.defense = {
-            "rock": 2,
-            "paper": 2,
-            "scissors": 2,
-        }
+    def generate_enemy_stats(self, x):
+        if random.random() < 0.05:
+            self.generate_random_enemy()
+            return Enemy
+        stats = self.extract_enemy_from_file(x)
+        setattr(self, 'hp', stats['hp'])
+        setattr(self, 'max_hp', stats['hp'])
+        setattr(self, 'armor', stats['armor'])
+        setattr(self, 'max_armor', stats['armor'])
+        setattr(self, "attack", {
+            "rock": stats["attack"]["rock"],
+            "paper": stats["attack"]["paper"],
+            "scissors": stats["attack"]["scissors"]
+        })
+        setattr(self, "defense", {
+            "rock": stats["defense"]["rock"],
+            "paper": stats["defense"]["paper"],
+            "scissors": stats["defense"]["scissors"]
+        })
+        return Enemy
 
-        self.charges = {
-            "rock": 3,
-            "paper": 3,
-            "scissors": 3,
-        }
+    def extract_enemy_from_file(self, x):
+        keys = []
+        for i in self.enemy_data.keys():
+            keys.append(i)
+        key = keys[x]
+        return self.enemy_data[key]
 
-    def statistic_boost(self):
-        self.max_hp += random.randint(1,2)
-        self.max_armor += random.randint(0,1)
-        self.hp = self.max_hp
-        self.armor = self.max_armor
-        for key in self.attack:
-            self.attack[key] += random.randint(0, 2)
-        for key in self.defense:
-            self.defense[key] += random.randint(0, 1)
+    def generate_random_enemy(self):
+        self.enemy_data = 1
+        pass
 
-    def __str__(self):
-        return self.__class__.__name__
 
 class Game:
-    def __init__(self):
+    def __init__(self, x):
         self.player = Character()
-        self.enemy = Enemy()
-        self.upgrade_file = json_read()
-        self.stage = 'battle'
+        self.enemy = Enemy(x)
+        self.stagnation_steps = 0
+        self.upgrade_file = json_read('upgrade.json')
         self.rarities = ['common', 'uncommon', 'rare', 'epic', 'legendary']
-
-    @staticmethod
-    def random_action(player):
-        available = [action for action, charges in player.charges.items() if charges > 0]
-        if not available:
-            return None
-        action = random.choice(available)
-        if player.charges[action] > 1:
-            player.charges[action] -= 1
-        else:
-            player.charges[action] = -1
-        return action
 
     def refill_charges(self, player_action, enemy_action):
         for action in self.player.charges:
@@ -112,23 +84,26 @@ class Game:
                 self.enemy.charges[action] += 1
 
     def game_step(self, model, optimizer):
-        old_p_hp = self.player.hp
-        old_e_hp = self.enemy.hp
+        old_data = (self.player.hp, self.player.armor, self.enemy.hp, self.enemy.armor, self.player.charges.copy())
         state = get_state(self)
         action_idx, log_prob = select_action_masked(model, state, self.player)
-        player_action = IDX_TO_ACTION[action_idx]
-        enemy_action = self.random_action(self.enemy)
+        p_act = IDX_TO_ACTION[action_idx]
+        e_act = random.choice([a for a, c in self.enemy.charges.items() if c > 0])
+        self.player.charges[p_act] -= 1
+        self.enemy.charges[e_act] -= 1
         logic = GameLogic()
-        result = logic.rps_result(player_action, enemy_action)
-        print(f"Player chooses {player_action}, Enemy chooses {enemy_action}, Result: {result}")
-        logic.handle_result(result, self.player, self.enemy, player_action, enemy_action)
-        self.refill_charges(player_action, enemy_action)
-        reward = calc_reward(old_p_hp, old_e_hp, self)
-        loss = -log_prob * reward
+        result = logic.rps_result(p_act, e_act)
+        logic.handle_result(result, self.player, self.enemy, p_act, e_act)
+
+        reward = calc_reward(*old_data, self)
+
+
+        loss = -log_prob * (reward / 10.0)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-
+        self.refill_charges(p_act, e_act)
+        return reward
 
     def random_rarities_choices(self):
         loot_list = []
@@ -148,8 +123,10 @@ class Game:
                 if key not in used_keys:
                     break
             used_keys.add(key)
+            loot_choice['rarity'] = loot
             loot_list.append(loot_choice)
-        return loot_list
+        added_weapons = self.choose_random_weapon(loot_list)
+        return added_weapons
 
     @staticmethod
     def get_key_from_dict(dict_):
@@ -157,65 +134,110 @@ class Game:
             return i, v
 
     @staticmethod
-    def choose_random_weapon(key):
-        if key in ('attack', 'defense'):
-            return random.choice(['rock', 'paper', 'scissors'])
+    def choose_random_weapon(data):
+        for i in data:
+            if 'attack' in i or 'defense' in i:
+                i['weapon'] = random.choice(['rock', 'paper', 'scissors'])
+        return data
 
-    def increase_stats(self, key, value, weapon):
+    def increase_stats(self, data, value, key):
+        weapon = data.get('weapon')
         if weapon is not None:
             stat = getattr(self.player, key)
             stat[weapon] += value
-            print(f'{weapon} {key} увеличено на {value}')
+            #print(f'{weapon} {key} увеличено на {value}')
         elif key == 'hp_max':
             self.player.max_hp += value
             self.player.hp += value
-            print(f'максимальное хп увеличено на {value}')
+            #print(f'максимальное хп увеличено на {value}')
         elif key == 'armor':
             self.player.max_armor += value
-            print(f'армор увеличен на {value}')
+            # print(f'армор увеличен на {value}')
         elif key == 'hp_heal':
             self.player.hp += value
             if self.player.hp > self.player.max_hp:
                 self.player.hp = self.player.max_hp
-            print(f'здоровье восстановлено на {value}')
-        print('фаза прокачки завершена')
+        #     print(f'здоровье восстановлено на {value}')
+        # print('фаза прокачки завершена')
 
     def upgrade(self):
         random_rarities = self.random_rarities_choices()
         loot_list = self.exclude_repeats(random_rarities)
-        random_loot = random.choice(loot_list)
-        key, value = self.get_key_from_dict(random_loot)
-        weapon = self.choose_random_weapon(key)
-        self.increase_stats(key, value, weapon)
-        self.enemy.statistic_boost()
+        best_choice = self.get_score_from_data(loot_list)
+        key, value = self.get_key_from_dict(best_choice)
+        self.increase_stats(best_choice, key=key, value=value)
+
+    def get_score_from_data(self, data):
+        current_score = 0
+        current_hp_percent = (self.player.hp / self.player.max_hp) * 100
+        score_table = {
+            "common": 1,
+            "uncommon": 2,
+            "rare": 3,
+            "epic": 7,
+            "legendary": 12,
+            "armor": 2.5,
+            "hp_max": 1.5,
+            "hp_heal": 0,
+            "attack": {
+                "rock": 2,
+                "paper": 1,
+                "scissors": 2
+            },
+            "defense": {
+                "rock": 2,
+                "paper": 1,
+                "scissors": 2
+            },
+        }
+        score_list = []
+        for i in data:
+            for x in i:
+                if x in ('attack', 'defense'):
+                    current_score += score_table[x][i['weapon']]
+                elif x in ('armor', 'hp_max'):
+                    current_score += score_table[x]
+                elif x == 'hp_heal':
+                    if 0 <= current_hp_percent <= 74:
+                        current_score += 99
+                    elif 75 <= current_hp_percent <= 90 and self.player.armor <= 2:
+                        current_score += 2
+            current_score += score_table[i['rarity']]
+            score_list.append(current_score)
+            current_score = 0
+        best_choice = max(score_list)
+        best_choice_index = score_list.index(best_choice)
+        return data[best_choice_index]
+
+
 
 
 class GameLogic:
-    def __init__(self):
-        self.WIN_MAP = {
-            ("rock", "scissors"): 1,
-            ("paper", "rock"): 1,
-            ("scissors", "paper"): 1,
-        }
+    WIN_MAP = {("rock", "scissors"): 1, ("paper", "rock"): 1, ("scissors", "paper"): 1}
 
     def rps_result(self, a, b):
-        if a == b:
-            return 0
+        if a == b: return 0
         return 1 if (a, b) in self.WIN_MAP else -1
 
     @staticmethod
     def apply_damage(attacker, defender, atk_type, def_type):
         damage = attacker.attack[atk_type]
         block = defender.defense[def_type]
-        effective_damage = max(0, damage - block)
-        absorbed = min(defender.armor, effective_damage)
-        defender.armor -= absorbed
-        effective_damage -= absorbed
-        defender.hp -= effective_damage
-        defender.hp = max(defender.hp, 0)
-        defender.armor = max(defender.armor, 0)
-        print(f"  -> {attacker} наносит {damage} урона ({block} блок) | "
-              f"броня поглотила: {absorbed}, HP потеряно: {effective_damage}")
+        raw_damage = damage - block
+        if raw_damage > 0:
+            absorbed = min(defender.armor, raw_damage)
+            defender.armor -= absorbed
+            final_hp_damage = raw_damage - absorbed
+            defender.hp -= final_hp_damage
+            defender.hp = max(defender.hp, 0)
+        # print(
+        #     f"[{attacker.__class__.__name__}] ➜ [{defender.__class__.__name__}] | "
+        #     f"{atk_type.upper()} vs {def_type.upper()} | "
+        #     f"Урон: {damage} (Защита: {block}) | "
+        #     f"Броня поглотила: {absorbed}, По HP: -{final_hp_damage} | "
+        #     f"Осталось HP: {defender.hp}",
+        #     f"Осталось ARM: {defender.armor}"
+        # )
 
     @staticmethod
     def armor_regen(action, who):
@@ -235,21 +257,50 @@ class GameLogic:
             self.armor_regen(player_action, player)
             self.armor_regen(enemy_action, enemy)
 
-
 if __name__ == '__main__':
-    game = Game()
     model = PolicyNet()
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
-    counter = 0
-    while counter != 10:
-        while game.player.is_alive() and game.enemy.is_alive():
-            game.game_step(model, optimizer)
-            if not game.player.is_alive():
-                print('player is dead')
-                break
-            if not game.enemy.is_alive():
-                print('enemy is dead')
+    try:
+        model.load_state_dict(torch.load('best_policy.pth'))
+        print("Веса загружены. Продолжаем обучение!")
+    except:
+        print("Новая модель. Начинаем с нуля.")
+    optimizer = optim.Adam(model.parameters(), lr=1e-4)
+    history = []
+    best_score = float('-inf')
+    for ep in range(1000):
+        total_ep_reward = 0
+        for x in range(12):
+            game = Game(x)
+            steps = 0
+            stagnation_counter = 0
+            last_stats = (game.player.hp, game.player.armor, game.enemy.hp, game.enemy.armor)
+            while game.player.is_alive() and game.enemy.is_alive():
+                if steps > 150:
+                    break
+                reward = game.game_step(model, optimizer)
+                total_ep_reward += reward
+                steps += 1
+                current_stats = (game.player.hp, game.player.armor, game.enemy.hp, game.enemy.armor)
+                if current_stats == last_stats:
+                    stagnation_counter += 1
+                else:
+                    stagnation_counter = 0
+                    last_stats = current_stats
+                if stagnation_counter >= 20:
+                    game.enemy.hp = 0
+                    total_ep_reward += 5
+                    break
+            if not game.enemy.is_alive() and game.player.is_alive():
                 game.upgrade()
-                counter += 1
-                print(f'round: {counter}')
-        break
+        if total_ep_reward > best_score:
+            best_score = total_ep_reward
+            torch.save(model.state_dict(), 'best_policy.pth')
+            print(f"Эпизод {ep}: Новый рекорд! {best_score:.2f}. Модель сохранена.")
+        history.append(total_ep_reward)
+        if ep % 100 == 0 and ep > 0:
+            plt.plot(history)
+            plt.savefig('progress.png')
+            plt.clf()
+
+    plt.plot(history)
+    plt.show()
